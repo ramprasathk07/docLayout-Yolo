@@ -2,7 +2,8 @@
 
 Working directory: `F:\gitRepos\DocLayout`.
 
-- **89 automated tests passed**, including real PyArrow 24.0.0 Parquet reads through the seekable range reader, complete synthetic prepare/verify/resume flows, grouped cross-validation, W&B payload/lifecycle tests, held-out checkpoint provenance, and JSON/CSV report generation. Tests block requests to external services.
+- **109 automated tests passed**, including real PyArrow 24.0.0 Parquet reads through the seekable range reader, complete synthetic prepare/verify/resume flows, grouped cross-validation, W&B payload/lifecycle tests, held-out checkpoint provenance, and JSON/CSV report generation. Tests block requests to external services.
+- New native-schema regressions reproduce the authenticated server's `image.path`, `bboxes`, and `category_ids` fields and its supplied `rp_as_000209_0.png` annotation values. All 12 domain prefixes were cross-checked with the official README's labeled image examples. Generated Parquet integration tests confirm that excluded Research Papers/Textbooks groups do not request image columns, while Forms pages export correctly.
 - The synthetic source includes newspaper-only and Forms row groups in train/val/test. Tests assert that only the Forms-containing row groups request image columns and only Forms pages are exported.
 - HTTP 200 whole-file fallback is refused before consuming its response body. Hard byte budget, row-group memory guard, changed-selection rejection, and file-hash tamper detection pass.
 - CLI help and Ruff checks passed.
@@ -15,7 +16,7 @@ Working directory: `F:\gitRepos\DocLayout`.
 
 Not locally verified:
 
-- The gated HF row schema and actual annotation ID convention. Public dataset metadata and upstream code were inspected, but this environment's shell cannot connect to HF, and gated rows were not available through public browsing. Run the bounded `inspect` command on the authenticated server; use explicit adapter overrides if needed.
+- Direct local access to gated HF rows remains blocked by the Windows network sandbox. The native row schema is now known from authenticated server inspection at revision `7f23f6d8569dd6336534dd9700259b9843ecab5e`; local tests reproduce that schema and the supplied sample records. The selected-domain preset explicitly uses the official zero-based layout class order and COCO pixel xywh boxes; it does not infer arbitrary numeric ID bases.
 - Live authenticated HF redirects/range responses. Real Parquet parsing over a simulated HTTP transport passed; external server behavior remains a server preflight check.
 - CUDA execution, distributed training, long-run convergence, full-epoch checkpoint/resume, and model accuracy on real FIRs. Run the small server smoke subset before the full selected subset.
 - Live W&B authentication, SDK uploads, and online/offline server lifecycle. Local tests use a fake SDK to check every metric/table/curve/artifact payload and resume behavior without contacting W&B.

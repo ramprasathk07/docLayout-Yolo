@@ -33,6 +33,8 @@ def download(argv=None):
         "max_transfer_mib",
         "max_group_mib",
         "types",
+        "category_id_base",
+        "bbox_format",
     }
     if not isinstance(config, dict) or set(config) - allowed or not config.get("types"):
         raise ValueError("Invalid selection config")

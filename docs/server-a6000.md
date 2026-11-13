@@ -41,7 +41,14 @@ python scripts/download_selected_indicdlp.py --output data/smoke \
   --max-train 40 --max-val 12 --max-test 12 --max-transfer-mib 2048
 ```
 
-The gated row schema was not accessible locally. Use the actual fields printed by `inspect` for any overrides, for example `--type-field metadata.document_type`, `--annotations-field annotations`, or `--document-id-field metadata.document_id`. Those are **examples**, not verified live field names. Unnamed numeric region IDs require a verified `--category-id-base 0` or `1`. Full details: [data-streaming.md](data-streaming.md).
+Authenticated server inspection has now confirmed the native `image`, `bboxes`,
+and `category_ids` schema at the revision pinned by the selected-domain preset.
+Document type and language are decoded from documented filename prefixes, so
+no type/annotation field override is needed for that revision. The preset
+explicitly selects zero-based IDs and pixel `xywh` boxes. If an older attempt
+created `selection.json`, use a fresh output such as `data/indicdlp_selected_v2`
+and substitute that directory throughout the commands below. Full details:
+[data-streaming.md](data-streaming.md).
 
 ## 3. Make five independent document-group folds
 

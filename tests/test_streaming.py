@@ -105,6 +105,76 @@ class Source:
             yield handle
 
 
+class NativeSource(Source):
+    """Same column types as the user's live HF schema; generated image bytes."""
+
+    def __init__(self):
+        super().__init__()
+        pa = pytest.importorskip("pyarrow")
+        pq = pytest.importorskip("pyarrow.parquet")
+        import io
+
+        for split in ("train", "val", "test"):
+            rows = []
+            for i, prefix in enumerate(("rp", "tb", "fm", "nt")):
+                encoded = io.BytesIO()
+                Image.new(
+                    "RGB",
+                    (100, 200),
+                    (i * 30, {"train": 20, "val": 80, "test": 140}[split], 10),
+                ).save(encoded, format="PNG")
+                rows.append(
+                    {
+                        "image": {
+                            "bytes": encoded.getvalue(),
+                            "path": f"{prefix}_hi_00020{i}_0.png",
+                        },
+                        "bboxes": [[10.0, 20.0, 30.0, 50.0]],
+                        "category_ids": [0],
+                    }
+                )
+            schema = pa.schema(
+                [
+                    (
+                        "image",
+                        pa.struct([("bytes", pa.binary()), ("path", pa.string())]),
+                    ),
+                    ("bboxes", pa.list_(pa.list_(pa.float32()))),
+                    ("category_ids", pa.list_(pa.int32())),
+                ]
+            )
+            buffer = io.BytesIO()
+            pq.write_table(
+                pa.Table.from_pylist(rows, schema=schema), buffer, row_group_size=2
+            )
+            self.payloads[f"data/{split}-0.parquet"] = buffer.getvalue()
+        self.shards = [Shard(p, len(v), split_for(p)) for p, v in self.payloads.items()]
+
+
+def test_native_parquet_filters_before_images_and_exports_parallel_annotations(
+    tmp_path,
+):
+    source = NativeSource()
+    report = prepare(
+        source,
+        tmp_path / "native",
+        Adapter(["paragraph"], category_id_base=0),
+        ["forms"],
+        [],
+        {"train": 1, "val": 1, "test": 1},
+    )
+    assert report["selected"] == {"train": 1, "val": 1, "test": 1}
+    assert len(source.image_reads) == 3 and all(
+        group == 1 for _, group in source.image_reads
+    )
+    for record in read_manifest(tmp_path / "native").values():
+        assert record["filename"] == "fm_hi_000202_0.png"
+        assert record["document_type"] == "forms" and record["language"] == "hindi"
+        assert (
+            tmp_path / "native" / record["label"]
+        ).read_text() == "0 0.25000000 0.22500000 0.30000000 0.25000000\n"
+
+
 def test_real_arrow_projection_excludes_image_bytes():
     source = Source()
     with source.open(source.shards[0]) as handle:

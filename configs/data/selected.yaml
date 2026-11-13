@@ -1,5 +1,7 @@
 repo: ai4bharat/indicdlp
-revision: main
+revision: 7f23f6d8569dd6336534dd9700259b9843ecab5e
+category_id_base: 0
+bbox_format: xywh
 types:
   - acts-and-rules
   - brochures

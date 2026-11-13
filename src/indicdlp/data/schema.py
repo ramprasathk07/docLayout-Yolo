@@ -64,6 +64,47 @@ DOMAIN_ALIASES = {
     "researchpapers": "research-papers",
 }
 
+# Verified against the labeled examples in AI4Bharat/IndicDLP's official README:
+# https://github.com/AI4Bharat/IndicDLP#-samples-from-the-indicdlp-dataset
+INDICDLP_DOMAIN_PREFIXES = {
+    "ar": "acts-and-rules",
+    "br": "brochures",
+    "fm": "forms",
+    "mg": "magazines",
+    "mn": "manuals",
+    "np": "newspapers",
+    "nt": "notices",
+    "nv": "novels",
+    "qp": "question-papers",
+    "rp": "research-papers",
+    "sy": "syllabi",
+    "tb": "textbooks",
+}
+
+
+def indicdlp_filename_metadata(filename):
+    """Decode documented domain prefixes and ISO language codes, not source IDs.
+
+    The numeric suffixes are deliberately not interpreted as document/page IDs;
+    that relationship has not been established by the HF schema.
+    """
+    basename = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    match = re.fullmatch(
+        r"(?P<domain>[a-z]{2})_(?P<language>[a-z]{2})_\d+_\d+\.(?:png|jpg|jpeg|tif|tiff)",
+        basename.lower(),
+    )
+    if not match:
+        return {}
+    if (
+        match["domain"] not in INDICDLP_DOMAIN_PREFIXES
+        or match["language"] not in LANGUAGES
+    ):
+        return {}
+    return {
+        "document_type": INDICDLP_DOMAIN_PREFIXES[match["domain"]],
+        "language": language(match["language"]),
+    }
+
 
 def domain(value):
     key = normalized(value)
@@ -153,6 +194,7 @@ class Adapter:
                 "metadata.filename",
             ],
         )
+        encoded_metadata = indicdlp_filename_metadata(filename)
         dtype, path = first(
             row,
             [self.type_field]
@@ -174,6 +216,8 @@ class Adapter:
                 f"Explicit document type field {self.type_field!r} is missing"
             )
         if dtype is None and filename:
+            dtype = encoded_metadata.get("document_type")
+        if dtype is None and filename:
             # Match complete filename/path tokens, never arbitrary substrings.
             tokens = re.split(r"[^a-z0-9]+", str(filename).lower())
             hits = {domain(t) for t in tokens if normalized(t) in DOMAIN_ALIASES}
@@ -190,7 +234,8 @@ class Adapter:
         if dtype is None or not isinstance(dtype, str):
             raise ValueError(
                 "Cannot identify document type safely. Run inspect, then set --type-field "
-                "to a string/ClassLabel field. Filename inference requires a full domain token."
+                "to a string/ClassLabel field. Filename inference requires a full domain token "
+                "or a documented IndicDLP prefix such as fm_hi_000220_0.png."
             )
         lang, path = first(
             row,
@@ -212,6 +257,8 @@ class Adapter:
             raise ValueError(
                 "Numeric language metadata requires named HF ClassLabel mappings"
             )
+        if lang is None and filename:
+            lang = encoded_metadata.get("language")
         if lang is None and filename:
             tokens = re.split(r"[^a-z0-9]+", str(filename).lower())
             hits = {
@@ -258,6 +305,19 @@ class Adapter:
                 "yolo_labels",
             ],
         )
+        if (
+            value is None
+            and not self.annotations_field
+            and field(row, "bboxes") is not None
+            and field(row, "category_ids") is not None
+        ):
+            # Native ai4bharat/indicdlp Parquet schema, confirmed from authenticated
+            # metadata inspection at revision 7f23f6d8569dd6336534dd9700259b9843ecab5e.
+            value = {
+                "bbox": field(row, "bboxes"),
+                "category_ids": field(row, "category_ids"),
+            }
+            path = ""
         if value is None:
             raise ValueError(
                 "No annotations found; set --annotations-field after inspect"
@@ -287,7 +347,15 @@ class Adapter:
         if isinstance(value, dict):
             boxes, box_key = first(value, ["bbox", "bboxes", "boxes"])
             labels, label_key = first(
-                value, ["category_id", "category", "class_id", "labels", "label"]
+                value,
+                [
+                    "category_id",
+                    "category_ids",
+                    "category",
+                    "class_id",
+                    "labels",
+                    "label",
+                ],
             )
             if boxes is None or labels is None:
                 raise ValueError(
@@ -304,7 +372,7 @@ class Adapter:
                     {"bbox": box, "category_id": label}
                     for box, label in zip(boxes, labels)
                 ]
-            label_path = f"{path}.{label_key}"
+            label_path = f"{path}.{label_key}" if path else label_key
         else:
             label_path = None
         if not isinstance(value, list):

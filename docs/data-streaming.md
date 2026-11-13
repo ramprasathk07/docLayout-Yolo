@@ -2,6 +2,49 @@
 
 Use the [A6000 server guide](server-a6000.md) for the full training/testing workflow.
 
+## Native HF schema confirmed from server inspection
+
+At revision `7f23f6d8569dd6336534dd9700259b9843ecab5e`, the authenticated
+inspection reported `image: {bytes, path}`, `bboxes: list[list[float]]`, and
+`category_ids: list[int32]`. There is no separate document-type column or HF
+ClassLabel mapping in that schema. The adapter now reads the parallel box/ID
+arrays directly. The selected-domain preset explicitly uses the official
+zero-based YOLO class order and COCO pixel `xywh` boxes.
+
+Document domains come from filename prefixes documented by the
+[official labeled examples](https://github.com/AI4Bharat/IndicDLP#-samples-from-the-indicdlp-dataset):
+
+| Prefix | Document domain |
+| --- | --- |
+| `ar` | Acts & Rules |
+| `br` | Brochures |
+| `fm` | Forms |
+| `mg` | Magazines |
+| `mn` | Manuals |
+| `np` | Newspapers |
+| `nt` | Notices |
+| `nv` | Novels |
+| `qp` | Question Papers |
+| `rp` | Research Papers |
+| `sy` | Syllabi |
+| `tb` | Textbooks |
+
+For example, `rp_as_000209_0.png` is Research Papers / Assamese and
+`fm_bn_000220_0.png` is Forms / Bengali. The adapter deliberately does not
+assume the numeric filename components identify source documents/pages;
+grouped CV still requires verified source-document grouping.
+
+After updating code from the earlier schema adapter, use a fresh output path
+because failed preparation attempts recorded the old adapter settings:
+
+```bash
+python scripts/download_selected_indicdlp.py --output data/indicdlp_selected_v2
+```
+
+No `--type-field` or `--annotations-field` override is needed for this native
+schema. The preset pins the inspected revision and sets `category_id_base: 0`
+and `bbox_format: xywh` in `configs/data/selected.yaml`.
+
 ## Inspect first, with no image-column reads
 
 ```bash
