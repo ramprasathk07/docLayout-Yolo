@@ -2,7 +2,8 @@
 
 Working directory: `F:\gitRepos\DocLayout`.
 
-- **109 automated tests passed**, including real PyArrow 24.0.0 Parquet reads through the seekable range reader, complete synthetic prepare/verify/resume flows, grouped cross-validation, W&B payload/lifecycle tests, held-out checkpoint provenance, and JSON/CSV report generation. Tests block requests to external services.
+- **114 automated tests passed**, including real PyArrow 24.0.0 Parquet reads through the seekable range reader, complete synthetic prepare/verify/resume flows, grouped cross-validation, W&B payload/lifecycle tests, held-out checkpoint provenance, and JSON/CSV report generation. Tests block requests to external services.
+- Empty-target regressions cover metadata-only rejection of empty native arrays, separately audited all-outside/degenerate boxes, no accidental negative training examples, durable audit recovery/resume, skip-ledger integrity, and continued strict failure for unknown class IDs. A dataset with no positive training/validation pages cannot be marked ready.
 - New native-schema regressions reproduce the authenticated server's `image.path`, `bboxes`, and `category_ids` fields and its supplied `rp_as_000209_0.png` annotation values. All 12 domain prefixes were cross-checked with the official README's labeled image examples. Generated Parquet integration tests confirm that excluded Research Papers/Textbooks groups do not request image columns, while Forms pages export correctly.
 - The synthetic source includes newspaper-only and Forms row groups in train/val/test. Tests assert that only the Forms-containing row groups request image columns and only Forms pages are exported.
 - HTTP 200 whole-file fallback is refused before consuming its response body. Hard byte budget, row-group memory guard, changed-selection rejection, and file-hash tamper detection pass.

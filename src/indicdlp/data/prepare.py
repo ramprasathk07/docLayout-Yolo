@@ -15,6 +15,23 @@ from PIL import Image
 from .schema import domain, language
 
 
+class NoUsableBoxes(ValueError):
+    """A structurally valid annotation set that cannot supply training targets."""
+
+    def __init__(self, sid, width, height, dropped):
+        self.details = {
+            "reason": "all_boxes_outside_or_degenerate"
+            if dropped
+            else "empty_annotations",
+            "width": width,
+            "height": height,
+            "dropped_boxes": dropped,
+        }
+        super().__init__(
+            f"Selected image {sid} has no usable region boxes ({self.details['reason']})"
+        )
+
+
 def atomic(path, data):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,8 +48,8 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def read_manifest(root):
-    path = root / "manifest.jsonl"
+def read_manifest(root, filename="manifest.jsonl"):
+    path = root / filename
     if not path.exists():
         return {}
     # Recover only a torn last append. Any corruption in completed records is fatal.
@@ -55,6 +72,23 @@ def read_manifest(root):
     return result
 
 
+def append_record(handle, record):
+    handle.write((json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8"))
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def skip_summary(records):
+    return {
+        "skipped_pages": len(records),
+        "skipped_reasons": dict(Counter(r["reason"] for r in records.values())),
+        "skipped_by_split": dict(Counter(r["split"] for r in records.values())),
+        "dropped_boxes_in_skipped_pages": sum(
+            r.get("dropped_boxes", 0) for r in records.values()
+        ),
+    }
+
+
 def verify_record(root, record):
     for name in ("image", "label"):
         path = (root / record[name]).resolve()
@@ -69,14 +103,15 @@ def verify_record(root, record):
 def write_sample(root, sid, split, raw_image, row, metadata, adapter, mappings):
     with Image.open(io.BytesIO(raw_image)) as original:
         width, height = original.size
+        lines, dropped = adapter.annotations(row, width, height, mappings)
+        if not lines:
+            # Never turn invalid annotations into training negatives. Preparation
+            # records these pages in skipped.jsonl and keeps their source location.
+            raise NoUsableBoxes(sid, width, height, dropped)
         # Do not EXIF-transpose: annotations refer to the source pixel coordinates.
         image = original.convert("RGB")
         encoded = io.BytesIO()
         image.save(encoded, format="PNG")
-    lines, dropped = adapter.annotations(row, width, height, mappings)
-    # Reject accidental negatives created by malformed/out-of-frame annotations.
-    if not lines:
-        raise ValueError(f"Selected image {sid} has no usable region boxes")
     image_bytes = encoded.getvalue()
     labels = ("\n".join(lines) + "\n").encode("utf-8")
     image_path, label_path = f"images/{split}/{sid}.png", f"labels/{split}/{sid}.txt"
@@ -128,14 +163,18 @@ def finalize(root, records, names, report):
             "dropped_boxes": sum(r["dropped_boxes"] for r in records.values()),
         }
     )
+    report.update(skip_summary(read_manifest(root, "skipped.jsonl")))
     json_write(root / "report.json", report)
+    completion = {
+        "manifest_sha256": digest((root / "manifest.jsonl").read_bytes()),
+        "selection_sha256": digest((root / "selection.json").read_bytes()),
+        "selected": dict(counts),
+    }
+    if (root / "skipped.jsonl").exists():
+        completion["skipped_sha256"] = digest((root / "skipped.jsonl").read_bytes())
     json_write(
         root / "complete.json",
-        {
-            "manifest_sha256": digest((root / "manifest.jsonl").read_bytes()),
-            "selection_sha256": digest((root / "selection.json").read_bytes()),
-            "selected": dict(counts),
-        },
+        completion,
     )
 
 
@@ -167,6 +206,11 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
     # A failed extension must never leave a previous completion marker behind.
     (root / "complete.json").unlink(missing_ok=True)
     records = read_manifest(root)
+    skipped = read_manifest(root, "skipped.jsonl")
+    if set(records) & set(skipped):
+        raise ValueError(
+            "A source page is both exported and skipped; inspect the preparation manifests"
+        )
     for record in records.values():
         verify_record(root, record)
     counts = Counter(r["split"] for r in records.values())
@@ -184,7 +228,28 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
         "limited": False,
     }
     try:
-        with (root / "manifest.jsonl").open("ab") as manifest:
+        with (
+            (root / "manifest.jsonl").open("ab") as manifest,
+            (root / "skipped.jsonl").open("ab") as skip_log,
+        ):
+
+            def skip_page(sid, split, metadata, shard, group, index, details):
+                record = {
+                    "id": sid,
+                    "split": split,
+                    **metadata,
+                    "shard": shard.path,
+                    "row_group": group,
+                    "row": index,
+                    **details,
+                }
+                append_record(skip_log, record)
+                skipped[sid] = record
+                print(
+                    f"[{split}] Skipping {metadata.get('filename') or sid}: {record['reason']}",
+                    flush=True,
+                )
+
             for split in ("train", "val", "test"):
                 if split not in limits:
                     continue
@@ -217,7 +282,7 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
                                 sid = digest(
                                     f"{source.repo}@{source.revision}/{shard.path}:{group}:{index}".encode()
                                 )[:24]
-                                if sid in records:
+                                if sid in records or sid in skipped:
                                     continue
                                 metadata = adapter.metadata(row, handle.mappings)
                                 if metadata["document_type"] not in types:
@@ -228,6 +293,26 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
                                     )
                                 if languages and metadata["language"] not in languages:
                                     continue
+                                if (
+                                    not adapter.annotations_field
+                                    and row.get("bboxes") == []
+                                    and row.get("category_ids") == []
+                                ):
+                                    # The native schema exposes empty annotations in metadata,
+                                    # so no image column needs to be fetched for this page.
+                                    skip_page(
+                                        sid,
+                                        split,
+                                        metadata,
+                                        shard,
+                                        group,
+                                        index,
+                                        {
+                                            "reason": "empty_annotations",
+                                            "dropped_boxes": 0,
+                                        },
+                                    )
+                                    continue
                                 selected.append((index, sid, metadata))
                             if not selected:
                                 continue
@@ -237,16 +322,28 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
                                     report["limited"] = True
                                     break
                                 raw = handle.image_at(table, index)
-                                record = write_sample(
-                                    root,
-                                    sid,
-                                    split,
-                                    raw,
-                                    rows[index],
-                                    metadata,
-                                    adapter,
-                                    handle.mappings,
-                                )
+                                try:
+                                    record = write_sample(
+                                        root,
+                                        sid,
+                                        split,
+                                        raw,
+                                        rows[index],
+                                        metadata,
+                                        adapter,
+                                        handle.mappings,
+                                    )
+                                except NoUsableBoxes as exc:
+                                    skip_page(
+                                        sid,
+                                        split,
+                                        metadata,
+                                        shard,
+                                        group,
+                                        index,
+                                        exc.details,
+                                    )
+                                    continue
                                 sha = record["image_sha256"]
                                 if sha in seen_hashes:
                                     # Exact duplicate pixels do not leak across official splits.
@@ -261,13 +358,7 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
                                         "row": index,
                                     }
                                 )
-                                manifest.write(
-                                    (
-                                        json.dumps(record, ensure_ascii=False) + "\n"
-                                    ).encode("utf-8")
-                                )
-                                manifest.flush()
-                                os.fsync(manifest.fileno())
+                                append_record(manifest, record)
                                 records[sid] = record
                                 seen_hashes[sha] = split
                                 counts[split] += 1
@@ -275,8 +366,10 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
         if any(limit and counts[split] >= limit for split, limit in limits.items()):
             report["limited"] = True
         report["transfer_bytes_this_run"] = source.budget.used
+        report.update(skip_summary(skipped))
         finalize(root, records, adapter.names, report)
     except Exception as exc:
+        report.update(skip_summary(skipped))
         report.update(
             {
                 "transfer_bytes_this_run": source.budget.used,
@@ -302,6 +395,12 @@ def verify_dataset(root):
         raise ValueError("Manifest changed after completion")
     if complete["selection_sha256"] != digest((root / "selection.json").read_bytes()):
         raise ValueError("Selection/schema changed after completion")
+    if "skipped_sha256" in complete:
+        skipped_path = root / "skipped.jsonl"
+        if not skipped_path.exists() or complete["skipped_sha256"] != digest(
+            skipped_path.read_bytes()
+        ):
+            raise ValueError("Skipped-page manifest changed after completion")
     records = read_manifest(root)
     for record in records.values():
         verify_record(root, record)

@@ -144,7 +144,24 @@ data/indicdlp_forms/
   complete.json              # written only after successful preparation
 ```
 
-Official train/val/test assignments are preserved. Exact decoded RGB image duplicates are skipped across all splits to prevent exact-page leakage. Existing near-duplicates or different pages from the same source document cannot be detected without reliable document IDs. Out-of-frame boxes are clipped; zero-area boxes are dropped and counted. Unknown class IDs, malformed annotations, crowd/ignore boxes, and selected pages with no usable boxes fail explicitly.
+Official train/val/test assignments are preserved. Exact decoded RGB image duplicates are skipped across all splits to prevent exact-page leakage. Existing near-duplicates or different pages from the same source document cannot be detected without reliable document IDs. Out-of-frame boxes are clipped; zero-area boxes are dropped and counted. Unknown class IDs, malformed annotations, and crowd/ignore boxes still fail explicitly.
+
+Selected pages with empty annotations are skipped rather than treated as verified
+background images. Pages whose boxes are all outside the image or degenerate are
+also excluded, with a distinct audit reason. `skipped.jsonl` records each source
+row ID, filename, split, shard, row group, row index, reason, and image dimensions
+when available. Native empty box/ID arrays are detected from metadata before
+requesting image columns. Reports include cumulative skipped-page counts,
+reason/split breakdowns, and dropped-box counts for skipped pages separately from
+successfully exported pages. Review `all_boxes_outside_or_degenerate` entries to
+distinguish isolated source issues from a coordinate-format/dimension mismatch.
+
+Resume uses both `manifest.jsonl` and `skipped.jsonl`, preserving completed pages
+and avoiding repeated image fetches for already audited exclusions. A torn final
+audit append can be recovered. Completed exports checksum the skip ledger too.
+This update can resume existing `indicdlp_selected_v2` exports; a fresh output
+directory is not required. No ready marker is written unless training and
+validation both contain at least one exported page with usable targets.
 
 Repeat `prepare` with identical filters/schema/revision to resume. Existing files are checked by SHA-256 and do not re-fetch their images. Larger sample limits are allowed; changed filters or revisions require a new directory. A torn final manifest append is recovered. Do not run concurrent preparers against the same output directory. Incomplete preparation is blocked from training.
 
