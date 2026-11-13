@@ -1,0 +1,17 @@
+repo: ai4bharat/indicdlp
+revision: main
+types:
+  - acts-and-rules
+  - brochures
+  - forms
+  - newspapers
+  - manuals
+  - notices
+  - novels
+  - syllabi
+max_train: 0
+max_val: 0
+max_test: 0
+max_transfer_mib: 32768
+max_group_mib: 1024
+output: data/indicdlp_selected
