@@ -89,6 +89,23 @@ def skip_summary(records):
     }
 
 
+def unverified_metadata_context(row, adapter):
+    """Recover a filename for the audit without repeating failed metadata parsing."""
+    filename = None
+    image = row.get(adapter.image_field)
+    if isinstance(image, dict) and isinstance(image.get("path"), str):
+        filename = image["path"]
+    for key in (adapter.filename_field, "file_name", "filename", "image_path", "path"):
+        if filename is None and key and isinstance(row.get(key), str):
+            filename = row[key]
+    return {
+        "filename": filename,
+        "document_type": None,
+        "language": None,
+        "document_id": None,
+    }
+
+
 def verify_record(root, record):
     for name in ("image", "label"):
         path = (root / record[name]).resolve()
@@ -284,13 +301,43 @@ def prepare(source, root, adapter, types, languages, limits, max_shards=0):
                                 )[:24]
                                 if sid in records or sid in skipped:
                                     continue
-                                metadata = adapter.metadata(row, handle.mappings)
+                                try:
+                                    metadata = adapter.metadata(row, handle.mappings)
+                                except ValueError as exc:
+                                    # This catch covers metadata verification only. Do not
+                                    # swallow annotation/class-ID, network, or storage errors.
+                                    skip_page(
+                                        sid,
+                                        split,
+                                        unverified_metadata_context(row, adapter),
+                                        shard,
+                                        group,
+                                        index,
+                                        {
+                                            "reason": "unverified_metadata",
+                                            "error": str(exc),
+                                            "metadata_fields": sorted(row),
+                                            "dropped_boxes": 0,
+                                        },
+                                    )
+                                    continue
                                 if metadata["document_type"] not in types:
                                     continue
                                 if languages and metadata["language"] is None:
-                                    raise ValueError(
-                                        "Language filter requested but language is missing; set --language-field"
+                                    skip_page(
+                                        sid,
+                                        split,
+                                        metadata,
+                                        shard,
+                                        group,
+                                        index,
+                                        {
+                                            "reason": "unverified_language",
+                                            "error": "Language filter requested but language is missing",
+                                            "dropped_boxes": 0,
+                                        },
                                     )
+                                    continue
                                 if languages and metadata["language"] not in languages:
                                     continue
                                 if (

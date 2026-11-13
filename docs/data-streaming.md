@@ -66,7 +66,7 @@ python train_indicdlp.py inspect \
   --image-field image
 ```
 
-These field names are **examples**, not a claim about inaccessible gated rows. Dotted paths can traverse JSON metadata. Without a document-type field, the adapter can infer domains from complete filename tokens such as `Hindi_Forms_...`; it rejects opaque names. Numeric document domains need named HF ClassLabel metadata. The embedded image column must be top-level; path-only image references are rejected rather than fetched from unverified locations.
+These field names are **examples**, not a claim about inaccessible gated rows. Dotted paths can traverse JSON metadata. Without a document-type field, the adapter can infer domains from complete filename tokens such as `Hindi_Forms_...`; preparation audits and skips opaque names. Numeric document domains need named HF ClassLabel metadata. The embedded image column must be top-level; path-only image references are rejected rather than fetched from unverified locations.
 
 Annotation handling:
 
@@ -145,6 +145,14 @@ data/indicdlp_forms/
 ```
 
 Official train/val/test assignments are preserved. Exact decoded RGB image duplicates are skipped across all splits to prevent exact-page leakage. Existing near-duplicates or different pages from the same source document cannot be detected without reliable document IDs. Out-of-frame boxes are clipped; zero-area boxes are dropped and counted. Unknown class IDs, malformed annotations, and crowd/ignore boxes still fail explicitly.
+
+Pages whose document metadata cannot be verified are excluded before image
+loading, with reason `unverified_metadata` in `skipped.jsonl`. The audit includes
+the parser error, available field names, filename when available, and exact source
+row location. No undocumented filename prefixes are guessed. A requested language
+filter also excludes pages with missing language as `unverified_language`.
+Row groups containing only these excluded pages do not request image columns;
+mixed groups may still transfer their bytes while fetching verified pages.
 
 Selected pages with empty annotations are skipped rather than treated as verified
 background images. Pages whose boxes are all outside the image or degenerate are

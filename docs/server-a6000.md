@@ -34,7 +34,10 @@ python scripts/download_selected_indicdlp.py \
 
 The downloader reads [configs/data/selected.yaml](../configs/data/selected.yaml): Acts & Rules, Brochures, Forms, Newspapers, Manuals, Notices, Novels, and Syllabi. It retains the source train/val/test assignments, with test images/labels physically in separate `images/test` and `labels/test` directories. It scans metadata and saves only matching pages; mixed Parquet row groups can still transfer some unrelated bytes. It does not retain raw Parquet shards.
 
-Pages without usable region targets are excluded and recorded in `skipped.jsonl`,
+Pages with unverifiable document metadata are skipped before image loading and
+recorded in `skipped.jsonl` as `unverified_metadata`, including the parser error
+and source row location. Unknown filename prefixes are not guessed.
+Pages without usable region targets are also excluded and recorded in `skipped.jsonl`,
 with empty annotations distinguished from boxes entirely outside the image or
 degenerate. They are not silently converted into background training examples.
 After an interrupted download, rerun the same command against the same output
