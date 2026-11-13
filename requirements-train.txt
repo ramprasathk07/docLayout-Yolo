@@ -1,0 +1,2 @@
+# Install the CUDA-compatible torch/torchvision pair first; see docs/server-a6000.md.
+-e .[train]

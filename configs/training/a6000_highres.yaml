@@ -1,0 +1,46 @@
+description: Single RTX A6000 48 GB; higher resolution for small form regions. Benchmark VRAM before a long run.
+train:
+  device: "0"
+  imgsz: 1600
+  batch: 8
+  workers: 8
+  epochs: 150
+  patience: 30
+  seed: 42
+  amp: true
+  deterministic: true
+  optimizer: AdamW
+  lr0: 0.0002
+  lrf: 0.01
+  cos_lr: true
+  nbs: 64
+  weight_decay: 0.0005
+  warmup_epochs: 5.0
+  warmup_bias_lr: 0.0
+  warmup_momentum: 0.8
+  momentum: 0.9
+  box: 7.5
+  cls: 0.5
+  dfl: 1.5
+  hsv_h: 0.0
+  hsv_s: 0.0
+  hsv_v: 0.1
+  degrees: 1.0
+  translate: 0.02
+  scale: 0.1
+  shear: 0.0
+  perspective: 0.0
+  fliplr: 0.0
+  flipud: 0.0
+  mosaic: 0.0
+  mixup: 0.0
+  copy_paste: 0.0
+  close_mosaic: 0
+  max_det: 1000
+  cache: false
+  save_period: 10
+tracking:
+  mode: online
+  project: indicdlp-doclayout
+  tags: [a6000, high-resolution, indicdlp, doclayout-yolo]
+  log_model: false

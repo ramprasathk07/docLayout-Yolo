@@ -1,0 +1,12 @@
+[
+  "advertisement", "answer", "author", "chapter-title", "contact-info",
+  "dateline", "figure", "figure-caption", "first-level-question", "flag",
+  "folio", "footer", "footnote", "formula", "header", "headline", "index",
+  "jumpline", "options", "ordered-list", "page-number", "paragraph",
+  "placeholder-text", "quote", "reference", "second-level-question",
+  "section-title", "sidebar", "sub-headline", "sub-ordered-list",
+  "sub-section-title", "subsub-ordered-list", "subsub-section-title",
+  "sub-unordered-list", "subsub-headline", "subsub-unordered-list", "table",
+  "table-caption", "table-of-contents", "third-level-question", "unordered-list",
+  "website-link"
+]
