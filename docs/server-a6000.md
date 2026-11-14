@@ -149,6 +149,25 @@ Accumulation and decay scaling are handled by the upstream trainer; warmup accum
 
 Explicit CLI flags override YAML, including `--batch 8`, `--lr0 0.0001`, `--no-amp`, `--epochs 1`, and `--wandb offline`. Start with a short run on the smoke subset to measure memory before committing to five full runs. Reduce batch first on OOM; A6000 memory capacity alone does not guarantee a particular batch will fit. The custom tracking/CV lifecycle currently runs on **one GPU per process**.
 
+If startup fails with `FileNotFoundError: yolov8n.pt` during the AMP check,
+the DocLayout pretrained weights may already be loaded correctly. The upstream
+checker loads an additional YOLOv8n model from a fork asset URL; a missing file
+is not caught by that checker. Run in FP32 to avoid this download dependency:
+
+```bash
+CUDA_VISIBLE_DEVICES=1 python train_indicdlp.py train \
+  --data data/indicdlp_selected_v2 --config configs/training/a6000.yaml \
+  --no-amp --batch 8 --device 0 --name selected_a6000_gpu1_fp32 --wandb online
+```
+
+This works with the existing CLI and needs no package update. Alternatively,
+`configs/training/a6000_fp32.yaml` records the same FP32 recipe with batch 8.
+Full precision can run slower and use more memory; reduce to `--batch 4` on OOM.
+Nominal batch stays at 64, and upstream accumulation adapts to the physical batch.
+Use a fresh run name when changing precision; this failure happens before the
+first training epoch, so start again without `--resume`. Training and validation
+W&B tracking remains enabled. No additional dataset download is required.
+
 Results live in:
 
 ```text

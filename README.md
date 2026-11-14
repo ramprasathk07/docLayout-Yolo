@@ -20,6 +20,7 @@ configs/
   data/selected.yaml              # the eight requested domains and streaming limits
   training/a6000.yaml             # 1280 px, batch 16, one 48 GB A6000
   training/a6000_highres.yaml     # 1600 px, batch 8
+  training/a6000_fp32.yaml        # 1280 px, batch 8; no AMP-check asset download
 scripts/
   download_selected_indicdlp.py  # bounded eight-domain downloader
   offline_model_smoke.py         # actual model/loss/backward/optimizer test, no weights download
