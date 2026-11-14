@@ -1,8 +1,9 @@
-# Local validation — 2026-11-13
+# Local validation — 2026-11-14
 
 Working directory: `F:\gitRepos\DocLayout`.
 
-- **128 automated tests passed**, including real PyArrow 24.0.0 Parquet reads through the seekable range reader, complete synthetic prepare/verify/resume flows, grouped cross-validation, W&B payload/lifecycle tests, held-out checkpoint provenance, and JSON/CSV report generation. Tests block requests to external services.
+- **132 automated tests passed**, including real PyArrow 24.0.0 Parquet reads through the seekable range reader, complete synthetic prepare/verify/resume flows, grouped cross-validation, W&B payload/lifecycle tests, held-out checkpoint provenance, and JSON/CSV report generation. Tests block requests to external services.
+- Authentication regressions use an 86-character synthetic key to verify that the full environment key and configured API host reach SDK login with `prompt=False` and `verify=True`. Old SDKs are rejected before login/init; failed/unsuccessful authentication cannot create runs or echo SDK messages containing secrets. Offline tracking never logs in. The standalone auth check creates no run. SDK calls are simulated; real service verification remains a server check.
 - Credential/startup regressions verify `.env` loading before CLI defaults, exported-variable precedence, literal secrets without environment interpolation, repository fallback, online failure without a key before SDK initialization, offline operation without credentials, no secrets in run configs, and model errors before W&B run creation. New-torch errors identify the active interpreter and required version pair. Actual private credentials are never loaded by tests.
 - Metadata-skip regressions cover unknown prefixes and missing filenames, audit error/source details, rejection before image reads, durable interruption/resume with saved pages preserved, language filtering, continued strict rejection of unknown region IDs, and refusal to mark all-unverified data ready.
 - Empty-target regressions cover metadata-only rejection of empty native arrays, separately audited all-outside/degenerate boxes, no accidental negative training examples, durable audit recovery/resume, skip-ledger integrity, and continued strict failure for unknown class IDs. A dataset with no positive training/validation pages cannot be marked ready.

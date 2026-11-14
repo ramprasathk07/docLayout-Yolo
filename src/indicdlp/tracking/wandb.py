@@ -21,6 +21,49 @@ def disable_native_wandb():
     native.callbacks.clear()
 
 
+def online_key():
+    key = os.environ.get("WANDB_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError(
+            "Online W&B requires WANDB_API_KEY in the environment or repository .env. "
+            "No interactive login is attempted. Use --wandb offline for local logging."
+        )
+    return key
+
+
+def authenticate_online(sdk):
+    """Use the supplied environment key, never a prompt or legacy key-length rule."""
+    key = online_key()
+    try:
+        version = tuple(int(part) for part in sdk.__version__.split(".")[:2])
+    except (AttributeError, ValueError):
+        version = (0, 0)
+    if version < (0, 31):
+        raise RuntimeError(
+            "W&B SDK is too old for this project's authentication flow. Run: "
+            "python -m pip install --upgrade 'wandb>=0.31,<0.32'. "
+            "Older SDKs may reject valid long API keys; do not truncate the key."
+        )
+    options = {"key": key, "prompt": False, "verify": True}
+    host = os.environ.get("WANDB_BASE_URL", "").strip()
+    if host:
+        options["host"] = host
+    try:
+        authenticated = sdk.login(**options)
+    except Exception as exc:
+        # SDK messages can contain supplied credentials. Do not echo them.
+        raise RuntimeError(
+            f"W&B authentication failed ({type(exc).__name__}). "
+            "Check WANDB_API_KEY, WANDB_BASE_URL, and server connectivity. "
+            "No interactive login was attempted."
+        ) from None
+    if not authenticated:
+        raise RuntimeError(
+            "W&B authentication did not succeed. Check WANDB_API_KEY and WANDB_BASE_URL. "
+            "No interactive login was attempted."
+        )
+
+
 class Tracking:
     def __init__(self, args, config, job_type="train"):
         self.args, self.run, self.sdk = args, None, None
@@ -31,14 +74,8 @@ class Tracking:
         if getattr(self.args, "wandb", "disabled") == "disabled":
             return self
         load_environment()
-        if (
-            self.args.wandb == "online"
-            and not os.environ.get("WANDB_API_KEY", "").strip()
-        ):
-            raise RuntimeError(
-                "Online W&B requires WANDB_API_KEY in the environment or repository .env. "
-                "No interactive login is attempted. Use --wandb offline for local logging."
-            )
+        if self.args.wandb == "online":
+            online_key()
         try:
             import wandb
         except ImportError as exc:
@@ -46,6 +83,8 @@ class Tracking:
                 "Install W&B: python -m pip install -r requirements-train.txt"
             ) from exc
         self.sdk = wandb
+        if self.args.wandb == "online":
+            authenticate_online(wandb)
         previous = None
         checkpoint = getattr(self.args, "resume", None)
         if checkpoint:

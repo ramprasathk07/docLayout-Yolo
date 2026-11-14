@@ -20,6 +20,24 @@ export WANDB_PROJECT='indicdlp-doclayout'
 
 Accept the [dataset access gate](https://huggingface.co/datasets/ai4bharat/indicdlp) with the HF account associated with the token. Commands load `.env` from the current directory and repository root; exported variables take precedence. Use the exact names `HF_TOKEN` and `WANDB_API_KEY`. Online tracking requires a nonempty API key and fails with a clear error instead of prompting; offline/disabled tracking needs no key. HF/W&B keys are never placed in CLI arguments, configs, or our metric reports. `WANDB_BASE_URL` optionally selects your API host; leave it unset to keep the SDK's configured host. Keys must belong to that host. The CUDA 12.1 wheels require a compatible NVIDIA driver. The older upstream checkpoint finalizer is why training is pinned below torch 2.6.
 
+W&B uses `wandb>=0.31,<0.32`. The old 0.19 dependency rejected newer long API
+keys; [W&B added support for keys longer than 40 characters in 0.22.3](https://github.com/wandb/wandb/releases/tag/v0.22.3).
+Keep the full key unchanged. Online tracking explicitly passes the environment
+key to `wandb.login(prompt=False, verify=True)` before creating a run. If your
+account uses Forge, set `WANDB_BASE_URL=https://api.forge.coreweave.com` in `.env`.
+No key or host is inferred from key length.
+
+After applying an update, refresh the editable package metadata and check auth:
+
+```bash
+python -m pip install --upgrade -e '.[train]'
+python scripts/check_wandb.py
+```
+
+This check authenticates without creating a run or downloading data/model weights.
+It never prints the key. Missing credentials, obsolete SDKs, and authentication
+failures exit with an error and never fall back to a prompt.
+
 If your existing environment reports torch 2.15.0+cu132, use the separate
 `.venv-train` environment above. CUDA support does not imply checkpoint-loader
 compatibility: starting in torch 2.6, `torch.load` defaults to `weights_only=True`,

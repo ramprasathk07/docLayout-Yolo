@@ -100,6 +100,7 @@ class Run:
 
 def fake_wandb_sdk(monkeypatch):
     calls, runs = [], []
+    login_calls = []
 
     def init(**kwargs):
         calls.append(kwargs)
@@ -108,6 +109,14 @@ def fake_wandb_sdk(monkeypatch):
         return run
 
     monkeypatch.setitem(
-        sys.modules, "wandb", SimpleNamespace(init=init, Settings=lambda **kw: kw)
+        sys.modules,
+        "wandb",
+        SimpleNamespace(
+            __version__="0.31.0",
+            init=init,
+            Settings=lambda **kw: kw,
+            login=lambda **kwargs: login_calls.append(kwargs) or True,
+            login_calls=login_calls,
+        ),
     )
     return calls, runs

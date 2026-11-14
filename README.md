@@ -41,6 +41,11 @@ upstream fork. Commands load repository/current-directory `.env` files without
 overriding exported variables. Online W&B requires `WANDB_API_KEY`; it never
 prompts interactively. `WANDB_BASE_URL` can select a custom API host.
 
+The training extra requires **W&B 0.31.x**, which supports modern long API keys.
+After updating, run `python -m pip install --upgrade -e '.[train]'` to refresh
+installed dependencies. Use `python scripts/check_wandb.py` to verify credentials
+without starting training or creating a run. Do not truncate API keys to 40 characters.
+
 ```bash
 # After installing the package and accepting the HF access gate:
 indicdlp inspect --max-transfer-mib 16

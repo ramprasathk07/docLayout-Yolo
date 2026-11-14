@@ -83,12 +83,22 @@ def test_missing_online_key_fails_without_sdk_init(monkeypatch, isolated_environ
 def test_online_uses_dotenv_key_without_putting_it_in_run_config(
     monkeypatch, isolated_environment
 ):
-    secret = "synthetic-wandb-only-test-key"
-    (isolated_environment / ".env").write_text(f"WANDB_API_KEY={secret}\n")
+    secret = "wandb_v1_" + "x" * 77  # New-style 86-character fixture, not a real key.
+    (isolated_environment / ".env").write_text(
+        f"WANDB_API_KEY={secret}\nWANDB_BASE_URL=https://api.forge.coreweave.com\n"
+    )
     calls, _ = fake_wandb_sdk(monkeypatch)
     args = parser_for_cli().parse_args(["train", "--wandb", "online"])
     tracker = Tracking(args, {"train": {"batch": 16}}).start()
     assert calls[0]["mode"] == "online" and secret not in json.dumps(calls)
+    assert sys.modules["wandb"].login_calls == [
+        {
+            "key": secret,
+            "prompt": False,
+            "verify": True,
+            "host": "https://api.forge.coreweave.com",
+        }
+    ]
     tracker.finish()
 
 
@@ -97,6 +107,7 @@ def test_offline_requires_no_key(monkeypatch, isolated_environment):
     args = parser_for_cli().parse_args(["train", "--wandb", "offline"])
     tracker = Tracking(args, {}).start()
     assert calls[0]["mode"] == "offline"
+    assert sys.modules["wandb"].login_calls == []
     tracker.finish()
 
 
@@ -123,3 +134,60 @@ def test_new_torch_error_identifies_active_interpreter(monkeypatch):
     with pytest.raises(RuntimeError, match="Unsupported torch 2.15.0") as error:
         load_model("does-not-exist.pt", "cpu")
     assert sys.executable in str(error.value) and "torch==2.5.1" in str(error.value)
+
+
+def test_old_sdk_is_rejected_before_login_and_init(monkeypatch, isolated_environment):
+    calls, _ = fake_wandb_sdk(monkeypatch)
+    sys.modules["wandb"].__version__ = "0.19.11"
+    monkeypatch.setenv("WANDB_API_KEY", "wandb_v1_" + "x" * 77)
+    args = parser_for_cli().parse_args(["train", "--wandb", "online"])
+    with pytest.raises(RuntimeError, match="pip install --upgrade"):
+        Tracking(args, {}).start()
+    assert calls == [] and sys.modules["wandb"].login_calls == []
+
+
+def test_failed_login_never_prompts_or_creates_run_or_echoes_key(
+    monkeypatch, isolated_environment
+):
+    calls, _ = fake_wandb_sdk(monkeypatch)
+    key = "synthetic-secret-do-not-echo"
+    monkeypatch.setenv("WANDB_API_KEY", key)
+
+    def reject(**kwargs):
+        assert (
+            kwargs["key"] == key
+            and kwargs["prompt"] is False
+            and kwargs["verify"] is True
+        )
+        raise ValueError(f"simulated SDK failure containing {key}")
+
+    sys.modules["wandb"].login = reject
+    args = parser_for_cli().parse_args(["train", "--wandb", "online"])
+    with pytest.raises(RuntimeError, match="W&B authentication failed") as error:
+        Tracking(args, {}).start()
+    assert key not in str(error.value) and calls == []
+
+
+def test_unsuccessful_login_is_not_followed_by_init(monkeypatch, isolated_environment):
+    calls, _ = fake_wandb_sdk(monkeypatch)
+    monkeypatch.setenv("WANDB_API_KEY", "synthetic-key")
+    sys.modules["wandb"].login = lambda **kwargs: False
+    args = parser_for_cli().parse_args(["train", "--wandb", "online"])
+    with pytest.raises(RuntimeError, match="did not succeed"):
+        Tracking(args, {}).start()
+    assert calls == []
+
+
+def test_auth_check_uses_env_without_creating_run(
+    monkeypatch, isolated_environment, capsys
+):
+    from scripts.check_wandb import main
+
+    key = "wandb_v1_" + "x" * 77
+    (isolated_environment / ".env").write_text(f"WANDB_API_KEY={key}\n")
+    calls, _ = fake_wandb_sdk(monkeypatch)
+    main()
+    output = capsys.readouterr().out
+    assert "authentication OK" in output and key not in output
+    assert sys.modules["wandb"].login_calls[0]["prompt"] is False
+    assert calls == []
