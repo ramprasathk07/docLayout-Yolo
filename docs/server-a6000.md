@@ -135,15 +135,15 @@ Each fold starts from the **same original pretrained checkpoint**, verified by S
 | --- | ---: | ---: |
 | Config | `configs/training/a6000.yaml` | `configs/training/a6000_highres.yaml` |
 | Image size | 1280 | 1600 |
-| Physical batch | 16 | 8 |
+| Physical batch | 8 | 8 |
 | Nominal batch (`nbs`) | 64 | 64 |
-| Steady-state gradient accumulation | about 4 steps | about 8 steps |
+| Steady-state gradient accumulation | about 8 steps | about 8 steps |
 | Optimizer | AdamW | AdamW |
 | Initial LR → cosine final LR | 2e-4 → 2e-6 | 2e-4 → 2e-6 |
 | Warmup | 5 epochs, bias LR starts at 0 | same |
 | Weight decay | 5e-4 | 5e-4 |
 | Epoch limit / patience | 150 / 30 | 150 / 30 |
-| AMP / workers | enabled / 8 | enabled / 8 |
+| AMP / workers | disabled (FP32) / 8 | enabled / 8 |
 
 Accumulation and decay scaling are handled by the upstream trainer; warmup accumulation ramps toward the nominal batch. Flips, mosaic, mixup, perspective, and shear are disabled. Rotation is limited to ±1 degree, translation to 2%, scale variation to 10%, and brightness variation to 10%. All 42 region class IDs are retained. `max_det=1000` accommodates dense documents such as newspapers. No per-class weighting is invented without validation evidence.
 
@@ -167,6 +167,15 @@ Nominal batch stays at 64, and upstream accumulation adapts to the physical batc
 Use a fresh run name when changing precision; this failure happens before the
 first training epoch, so start again without `--resume`. Training and validation
 W&B tracking remains enabled. No additional dataset download is required.
+
+The standard `a6000.yaml` now defaults to `amp: false`, batch 8. The trainer
+adapter also enforces a requested FP32 setting in `on_pretrain_routine_start`,
+after checkpoint configuration restoration, before the upstream AMP check.
+It prints `Training precision: FP32 (amp=False)` at that point. High-resolution
+AMP training remains an explicit alternative requiring a working upstream check.
+When troubleshooting an older server checkout, first confirm that its launch
+preview contains `"amp": false`; changing a local PC file does not update the
+server checkout. Use `--dry-run` with the same arguments to inspect the preview.
 
 Results live in:
 

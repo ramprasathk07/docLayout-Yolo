@@ -1,13 +1,13 @@
-description: Single RTX A6000 48 GB; document-layout fine-tuning starting recipe.
+description: Single RTX A6000 48 GB; FP32 startup avoids the broken upstream AMP-check download.
 train:
   device: "0"
   imgsz: 1280
-  batch: 16
+  batch: 8
   workers: 8
   epochs: 150
   patience: 30
   seed: 42
-  amp: true
+  amp: false
   deterministic: true
   optimizer: AdamW
   lr0: 0.0002

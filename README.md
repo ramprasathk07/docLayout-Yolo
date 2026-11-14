@@ -18,7 +18,7 @@ src/indicdlp/
   resources/classes.json         # official 42-class order, included in package wheels
 configs/
   data/selected.yaml              # the eight requested domains and streaming limits
-  training/a6000.yaml             # 1280 px, batch 16, one 48 GB A6000
+  training/a6000.yaml             # 1280 px, batch 8, FP32 on one 48 GB A6000
   training/a6000_highres.yaml     # 1600 px, batch 8
   training/a6000_fp32.yaml        # 1280 px, batch 8; no AMP-check asset download
 scripts/

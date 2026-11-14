@@ -107,6 +107,27 @@ def best_epoch_from_csv(path):
     return int(float(best["epoch"]))
 
 
+def attach_precision_guard(model, args):
+    """Apply explicit FP32 requests after upstream checkpoint/config restoration."""
+    if not hasattr(model, "add_callback"):
+        return
+
+    def before_setup(trainer):
+        # Upstream fires this event before it reads args.amp and calls check_amp.
+        # Resume restores checkpoint options, so passing amp=False to train()
+        # alone is insufficient to guarantee the auxiliary check is avoided.
+        if not args.amp:
+            trainer.args.amp = False
+        enabled = bool(trainer.args.amp)
+        print(
+            f"Training precision: {'AMP requested' if enabled else 'FP32'} "
+            f"(amp={enabled})",
+            flush=True,
+        )
+
+    model.add_callback("on_pretrain_routine_start", before_setup)
+
+
 def run_train(args):
     validate_training(args)
     data = training_data(args)
@@ -160,6 +181,7 @@ def run_train(args):
         args, preview, "cross-validation" if getattr(args, "fold", None) else "train"
     ).start()
     try:
+        attach_precision_guard(model, args)
         if context:
             model.add_callback(
                 "on_pretrain_routine_start",
