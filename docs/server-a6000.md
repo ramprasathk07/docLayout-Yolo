@@ -5,8 +5,8 @@ Run these commands from the repository root. The presets target **one RTX A6000 
 ## 1. Install and authenticate
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
+python3.11 -m venv .venv-train
+source .venv-train/bin/activate
 python -m pip install --upgrade pip
 python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
 python -m pip install -e '.[train,dev]'
@@ -18,7 +18,25 @@ export WANDB_PROJECT='indicdlp-doclayout'
 # Optional: export WANDB_ENTITY='your_team'
 ```
 
-Accept the [dataset access gate](https://huggingface.co/datasets/ai4bharat/indicdlp) with the HF account associated with the token. An exported environment variable is enough; `.env.example` documents variable names but is not automatically loaded. HF/W&B keys are never placed in CLI arguments, configs, or our metric reports. The CUDA 12.1 wheels require a compatible NVIDIA driver; choose the appropriate PyTorch wheel channel if your server needs a different build. The older upstream checkpoint finalizer is why training is pinned below torch 2.6.
+Accept the [dataset access gate](https://huggingface.co/datasets/ai4bharat/indicdlp) with the HF account associated with the token. Commands load `.env` from the current directory and repository root; exported variables take precedence. Use the exact names `HF_TOKEN` and `WANDB_API_KEY`. Online tracking requires a nonempty API key and fails with a clear error instead of prompting; offline/disabled tracking needs no key. HF/W&B keys are never placed in CLI arguments, configs, or our metric reports. `WANDB_BASE_URL` optionally selects your API host; leave it unset to keep the SDK's configured host. Keys must belong to that host. The CUDA 12.1 wheels require a compatible NVIDIA driver. The older upstream checkpoint finalizer is why training is pinned below torch 2.6.
+
+If your existing environment reports torch 2.15.0+cu132, use the separate
+`.venv-train` environment above. CUDA support does not imply checkpoint-loader
+compatibility: starting in torch 2.6, `torch.load` defaults to `weights_only=True`,
+whereas this fork uses full serialized model objects. This code deliberately
+keeps the supported torch 2.5.1 / torchvision 0.20.1 combination. Check the actual
+interpreter before launching; model/runtime errors now fail before W&B creates a run:
+
+```bash
+.venv-train/bin/python -c "import sys,torch,torchvision; print(sys.executable); print(torch.__version__, torchvision.__version__); print('CUDA:', torch.cuda.is_available())"
+
+CUDA_VISIBLE_DEVICES=1 .venv-train/bin/python train_indicdlp.py train \
+  --data data/indicdlp_selected_v2 --config configs/training/a6000.yaml \
+  --device 0 --name selected_a6000_gpu1 --wandb online
+```
+
+`CUDA_VISIBLE_DEVICES=1` selects physical GPU 1, presented to the process as device 0.
+Prepared data can be reused directly; changing the environment requires no data download.
 
 The installed command is `indicdlp`. Every command also works as `python train_indicdlp.py ...` from the repository root.
 

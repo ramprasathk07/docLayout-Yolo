@@ -13,6 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 def no_network(monkeypatch):
     import requests
 
+    # Never load actual developer credentials while exercising CLI defaults.
+    monkeypatch.setattr("indicdlp.environment.load_dotenv", lambda *a, **kw: False)
+
     def blocked(*args, **kwargs):
         raise AssertionError("Tests must not open network connections")
 

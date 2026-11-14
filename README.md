@@ -35,6 +35,12 @@ train_indicdlp.py                # thin repository entry point, compatible with 
 
 Follow [docs/server-a6000.md](docs/server-a6000.md) for installation and environment variables (`HF_TOKEN`, `WANDB_API_KEY`, optional project/entity). The workflow is:
 
+Use a separate Python 3.11 training environment with **torch 2.5.1 / torchvision
+0.20.1**. Torch 2.6+ changes checkpoint-loading defaults and is rejected by this
+upstream fork. Commands load repository/current-directory `.env` files without
+overriding exported variables. Online W&B requires `WANDB_API_KEY`; it never
+prompts interactively. `WANDB_BASE_URL` can select a custom API host.
+
 ```bash
 # After installing the package and accepting the HF access gate:
 indicdlp inspect --max-transfer-mib 16

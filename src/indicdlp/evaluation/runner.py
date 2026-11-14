@@ -114,13 +114,13 @@ def run_evaluate(args):
         if args.split == "test"
         else {"dataset": fingerprint(Path(args.data).resolve())}
     )
+    model = load_model(args.weights, args.device)
     tracker = Tracking(
         args,
         {"split": args.split, "weights": args.weights, "data": str(data), **provenance},
         args.split,
     ).start()
     try:
-        model = load_model(args.weights, args.device)
         report, path = evaluate_model(model, data, args, args.split)
         report["provenance"] = provenance
         write_report(path, report)

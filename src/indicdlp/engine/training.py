@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import csv
+import sys
 from pathlib import Path
 
 from ..data.prepare import verify_dataset, digest, json_write
@@ -41,8 +42,11 @@ def load_model(weights, device):
         )
     if tuple(map(int, torch.__version__.split("+")[0].split(".")[:2])) >= (2, 6):
         raise RuntimeError(
-            "This upstream fork expects the older full-object checkpoint loader. "
-            "Use the isolated torch 2.5.1 / torchvision 0.20.1 environment in README."
+            f"Unsupported torch {torch.__version__} in {sys.executable}. "
+            "DocLayout-YOLO 0.0.4 expects the pre-2.6 full-object checkpoint loader. "
+            "Create a separate Python 3.11 training environment with torch==2.5.1 "
+            "and torchvision==0.20.1; see docs/server-a6000.md. "
+            "A newer CUDA-enabled torch installation does not satisfy this fork's compatibility pin."
         )
     os.environ.setdefault("COMET_MODE", "DISABLED")
     from doclayout_yolo import YOLOv10
@@ -150,11 +154,12 @@ def run_train(args):
     print(json.dumps(preview, indent=2))
     if args.dry_run:
         return preview
+    # Fail on incompatible torch/CUDA/checkpoints before creating an empty W&B run.
+    model = load_model(args.resume or args.weights, args.device)
     tracking = Tracking(
         args, preview, "cross-validation" if getattr(args, "fold", None) else "train"
     ).start()
     try:
-        model = load_model(args.resume or args.weights, args.device)
         if context:
             model.add_callback(
                 "on_pretrain_routine_start",

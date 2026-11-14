@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import time
 from pathlib import Path
 
 from ..data.prepare import json_write
 from ..evaluation.metrics import scalars, snapshot
 from ..evaluation.report import write_report
+from ..environment import load_environment
 
 
 def disable_native_wandb():
@@ -28,6 +30,15 @@ class Tracking:
     def start(self):
         if getattr(self.args, "wandb", "disabled") == "disabled":
             return self
+        load_environment()
+        if (
+            self.args.wandb == "online"
+            and not os.environ.get("WANDB_API_KEY", "").strip()
+        ):
+            raise RuntimeError(
+                "Online W&B requires WANDB_API_KEY in the environment or repository .env. "
+                "No interactive login is attempted. Use --wandb offline for local logging."
+            )
         try:
             import wandb
         except ImportError as exc:

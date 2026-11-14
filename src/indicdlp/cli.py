@@ -17,6 +17,7 @@ from indicdlp.data.source import HubSource
 from indicdlp.engine.training import DEFAULT_WEIGHTS, run_train
 from indicdlp.evaluation.runner import run_evaluate
 from indicdlp.config import HYPER_DEFAULTS, apply_config, validate_training
+from indicdlp.environment import load_environment
 
 
 ROOT = Path(__file__).resolve().parent
@@ -167,6 +168,7 @@ def add_tracking(parser):
 
 
 def parser_for_cli():
+    load_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     inspect = commands.add_parser(

@@ -86,6 +86,7 @@ def test_tracking_callbacks_and_no_secret_logging(monkeypatch, tmp_path):
 
 def test_online_resume_uses_persisted_id_and_project(monkeypatch, tmp_path):
     calls, _ = sdk(monkeypatch)
+    monkeypatch.setenv("WANDB_API_KEY", "synthetic-test-key")
     folder = tmp_path / "run"
     (folder / "weights").mkdir(parents=True)
     (folder / "wandb_run.json").write_text(
